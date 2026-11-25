@@ -3,6 +3,7 @@ package com.nikhil.yt.desktop
 import com.nikhil.yt.innertube.YouTube
 import com.nikhil.yt.innertube.models.SongItem
 import com.nikhil.yt.innertube.models.YouTubeClient
+import com.nikhil.yt.innertube.models.response.PlayerResponse
 import com.nikhil.yt.innertube.pages.NewPipeUtils
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -18,7 +19,12 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.util.Collections
 import java.util.Locale
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicLong
 
 data class PlaybackState(
     val currentSong: SongItem? = null,
@@ -31,7 +37,8 @@ data class PlaybackState(
 )
 
 /**
- * Desktop audio player backed by `ffplay` and `:innertube` stream resolution.
+ * Thread-safe desktop audio player backed by `ffplay` and `:innertube` stream resolution.
+ * Guarantees at most one `ffplay` process is ever active and cleans up on JVM exit.
  */
 class DesktopAudioPlayer(
     private val onTrackEnded: () -> Unit,
@@ -41,20 +48,38 @@ class DesktopAudioPlayer(
     private val _state = MutableStateFlow(PlaybackState())
     val state: StateFlow<PlaybackState> = _state.asStateFlow()
 
-    private var process: Process? = null
-    private var monitorJob: Job? = null
-    private var loadJob: Job? = null
+    private val processLock = Any()
+    private val activeProcesses = Collections.newSetFromMap(ConcurrentHashMap<Process, Boolean>())
+    private val generation = AtomicLong(0L)
+    private val isShutdown = AtomicBoolean(false)
 
-    private var activeStreamUrl: String? = null
-    private var activeUserAgent: String = YouTubeClient.USER_AGENT_WEB
-    private var playbackStartedAtMs: Long = 0L
-    private var playbackBaseOffsetMs: Long = 0L
+    @Volatile private var currentProcess: Process? = null
+    @Volatile private var monitorJob: Job? = null
+    @Volatile private var loadJob: Job? = null
+    @Volatile private var volumeApplyJob: Job? = null
+
+    @Volatile private var activeStreamUrl: String? = null
+    @Volatile private var activeUserAgent: String = YouTubeClient.USER_AGENT_WEB
+    @Volatile private var playbackStartedAtMs: Long = 0L
+    @Volatile private var playbackBaseOffsetMs: Long = 0L
 
     private val ffplayExecutable: String by lazy { findFfplayExecutable() }
 
+    private val shutdownHook = Thread {
+        killAllTrackedProcesses()
+    }
+
+    init {
+        runCatching { Runtime.getRuntime().addShutdownHook(shutdownHook) }
+    }
+
     fun play(song: SongItem) {
+        if (isShutdown.get()) return
+        val myGen = generation.incrementAndGet()
         loadJob?.cancel()
-        stopProcessOnly()
+        volumeApplyJob?.cancel()
+        killAllTrackedProcesses()
+        activeStreamUrl = null
 
         _state.update {
             it.copy(
@@ -69,6 +94,8 @@ class DesktopAudioPlayer(
 
         loadJob = scope.launch {
             val resolved = resolveStream(song.id)
+            if (myGen != generation.get() || isShutdown.get()) return@launch
+
             if (resolved == null) {
                 _state.update {
                     it.copy(
@@ -89,7 +116,7 @@ class DesktopAudioPlayer(
                     isBuffering = false,
                 )
             }
-            startFfplayAt(0L)
+            startFfplayAt(offsetMs = 0L, expectedGen = myGen)
         }
     }
 
@@ -106,50 +133,60 @@ class DesktopAudioPlayer(
     fun pause() {
         val current = _state.value
         if (!current.isPlaying) return
+        generation.incrementAndGet()
+        volumeApplyJob?.cancel()
         val elapsed = computeCurrentPositionMs()
-        stopProcessOnly()
+        killAllTrackedProcesses()
         _state.update { it.copy(isPlaying = false, positionMs = elapsed) }
     }
 
     fun resume() {
         val current = _state.value
-        if (current.isPlaying || current.currentSong == null) return
-        if (activeStreamUrl == null) {
+        if (current.isPlaying || current.currentSong == null || isShutdown.get()) return
+        val url = activeStreamUrl
+        if (url == null) {
             play(current.currentSong)
             return
         }
+        val myGen = generation.incrementAndGet()
         scope.launch {
-            startFfplayAt(current.positionMs)
+            startFfplayAt(offsetMs = current.positionMs, expectedGen = myGen)
         }
     }
 
     fun seekTo(positionMs: Long) {
         val current = _state.value
-        if (current.currentSong == null || activeStreamUrl == null) return
+        if (current.currentSong == null || activeStreamUrl == null || isShutdown.get()) return
         val clamped = positionMs.coerceIn(0L, current.durationMs.coerceAtLeast(1L))
         _state.update { it.copy(positionMs = clamped) }
         if (current.isPlaying) {
+            val myGen = generation.incrementAndGet()
             scope.launch {
-                startFfplayAt(clamped)
+                startFfplayAt(offsetMs = clamped, expectedGen = myGen)
             }
         }
     }
 
     fun setVolume(volume: Float) {
         val clamped = volume.coerceIn(0f, 1f)
-        val current = _state.value
         _state.update { it.copy(volume = clamped) }
-        if (current.isPlaying && activeStreamUrl != null) {
+        if (!_state.value.isPlaying || activeStreamUrl == null || isShutdown.get()) return
+
+        volumeApplyJob?.cancel()
+        volumeApplyJob = scope.launch {
+            delay(150L)
+            if (!_state.value.isPlaying || activeStreamUrl == null || isShutdown.get()) return@launch
             val pos = computeCurrentPositionMs()
-            scope.launch {
-                startFfplayAt(pos)
-            }
+            val myGen = generation.incrementAndGet()
+            startFfplayAt(offsetMs = pos, expectedGen = myGen)
         }
     }
 
     fun stop() {
+        generation.incrementAndGet()
         loadJob?.cancel()
-        stopProcessOnly()
+        volumeApplyJob?.cancel()
+        killAllTrackedProcesses()
         activeStreamUrl = null
         _state.update {
             it.copy(
@@ -161,15 +198,18 @@ class DesktopAudioPlayer(
     }
 
     fun shutdown() {
+        if (!isShutdown.compareAndSet(false, true)) return
+        generation.incrementAndGet()
         loadJob?.cancel()
-        stopProcessOnly()
+        volumeApplyJob?.cancel()
+        killAllTrackedProcesses()
+        runCatching { Runtime.getRuntime().removeShutdownHook(shutdownHook) }
         scope.cancel()
     }
 
-    private suspend fun startFfplayAt(offsetMs: Long) = withContext(Dispatchers.IO) {
+    private suspend fun startFfplayAt(offsetMs: Long, expectedGen: Long) = withContext(Dispatchers.IO) {
         val url = activeStreamUrl ?: return@withContext
-        stopProcessOnly()
-
+        val userAgent = activeUserAgent
         val volPercent = (_state.value.volume * 100f).toInt().coerceIn(0, 100)
         val offsetSeconds = String.format(Locale.US, "%.3f", offsetMs / 1000.0)
 
@@ -181,7 +221,7 @@ class DesktopAudioPlayer(
             add("quiet")
             add("-vn")
             add("-user_agent")
-            add(activeUserAgent)
+            add(userAgent)
             if (offsetMs > 0L) {
                 add("-ss")
                 add(offsetSeconds)
@@ -191,39 +231,51 @@ class DesktopAudioPlayer(
             add(url)
         }
 
-        try {
-            val startedProcess = ProcessBuilder(command)
-                .redirectErrorStream(true)
-                .start()
-            process = startedProcess
-            playbackBaseOffsetMs = offsetMs
-            playbackStartedAtMs = System.currentTimeMillis()
-            _state.update { it.copy(isPlaying = true, errorMessage = null) }
+        val startedProcess: Process = synchronized(processLock) {
+            if (expectedGen != generation.get() || isShutdown.get()) return@withContext
+            killAllTrackedProcessesLocked()
 
-            monitorJob = scope.launch {
-                while (isActive && startedProcess.isAlive) {
-                    val pos = computeCurrentPositionMs()
-                    val dur = _state.value.durationMs
-                    _state.update {
-                        it.copy(positionMs = if (dur > 0L) pos.coerceAtMost(dur) else pos)
-                    }
-                    delay(250L)
+            try {
+                val proc = ProcessBuilder(command)
+                    .redirectErrorStream(true)
+                    .start()
+                activeProcesses.add(proc)
+                currentProcess = proc
+                playbackBaseOffsetMs = offsetMs
+                playbackStartedAtMs = System.currentTimeMillis()
+                proc
+            } catch (e: Exception) {
+                _state.update {
+                    it.copy(
+                        isPlaying = false,
+                        errorMessage = "Failed to launch ffplay (${e.message ?: "unknown error"}). Make sure ffmpeg/ffplay is installed.",
+                    )
                 }
+                return@withContext
+            }
+        }
 
-                if (isActive && process === startedProcess) {
-                    val exitCode = runCatching { startedProcess.waitFor() }.getOrDefault(0)
+        _state.update { it.copy(isPlaying = true, errorMessage = null) }
+
+        monitorJob = scope.launch {
+            while (isActive && startedProcess.isAlive && expectedGen == generation.get() && !isShutdown.get()) {
+                val pos = computeCurrentPositionMs()
+                val dur = _state.value.durationMs
+                _state.update {
+                    it.copy(positionMs = if (dur > 0L) pos.coerceAtMost(dur) else pos)
+                }
+                delay(250L)
+            }
+
+            if (expectedGen == generation.get() && !isShutdown.get()) {
+                val exitCode = runCatching { startedProcess.waitFor() }.getOrDefault(-1)
+                activeProcesses.remove(startedProcess)
+                if (expectedGen == generation.get() && !isShutdown.get()) {
                     _state.update { it.copy(isPlaying = false) }
                     if (exitCode == 0) {
                         onTrackEnded()
                     }
                 }
-            }
-        } catch (e: Exception) {
-            _state.update {
-                it.copy(
-                    isPlaying = false,
-                    errorMessage = "Failed to launch ffplay (${e.message ?: "unknown error"}). Make sure ffmpeg/ffplay is installed.",
-                )
             }
         }
     }
@@ -233,15 +285,31 @@ class DesktopAudioPlayer(
         return playbackBaseOffsetMs + elapsed
     }
 
-    private fun stopProcessOnly() {
+    private fun killAllTrackedProcesses() {
+        synchronized(processLock) {
+            killAllTrackedProcessesLocked()
+        }
+    }
+
+    private fun killAllTrackedProcessesLocked() {
         monitorJob?.cancel()
         monitorJob = null
-        val old = process
-        process = null
-        if (old != null && old.isAlive) {
-            old.destroy()
-            if (old.isAlive) {
-                old.destroyForcibly()
+        currentProcess = null
+
+        val snapshot = activeProcesses.toList()
+        activeProcesses.clear()
+        for (proc in snapshot) {
+            runCatching {
+                proc.descendants().forEach { child ->
+                    runCatching { child.destroyForcibly() }
+                }
+                if (proc.isAlive) {
+                    proc.destroy()
+                    if (!proc.waitFor(150, TimeUnit.MILLISECONDS)) {
+                        proc.destroyForcibly()
+                        proc.waitFor(350, TimeUnit.MILLISECONDS)
+                    }
+                }
             }
         }
     }
@@ -295,7 +363,7 @@ class DesktopAudioPlayer(
             val audioFormats = response.streamingData?.adaptiveFormats
                 ?.filter { it.isAudio && it.bitrate > 0 && (it.url != null || it.signatureCipher != null || it.cipher != null) }
                 ?.sortedWith(
-                    compareByDescending<com.nikhil.yt.innertube.models.response.PlayerResponse.StreamingData.Format> { it.url != null }
+                    compareByDescending<PlayerResponse.StreamingData.Format> { it.url != null }
                         .thenByDescending { it.bitrate }
                 )
                 .orEmpty()

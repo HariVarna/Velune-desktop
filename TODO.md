@@ -1,0 +1,1 @@
+* make a portable, customizable and unique miniplayer 
