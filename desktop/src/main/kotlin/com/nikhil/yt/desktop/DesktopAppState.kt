@@ -66,6 +66,8 @@ data class DesktopUiState(
     val persisted: DesktopPersistedState = DesktopPersistedState(),
     val artworkPalette: ArtworkPalette = ArtworkPalette(),
     val isPlayerExpanded: Boolean = false,
+    val isPortableMiniPlayerOpen: Boolean = false,
+    val isFullscreen: Boolean = false,
     val libraryTab: LibraryTab = LibraryTab.LIKED,
     val selectedLocalPlaylistId: String? = null,
 
@@ -125,6 +127,7 @@ class DesktopAppController {
     val uiState: StateFlow<DesktopUiState> = _uiState.asStateFlow()
 
     private var suggestionJob: Job? = null
+    private var blurHideJob: Job? = null
     private var lyricsJob: Job? = null
     private var paletteJob: Job? = null
 
@@ -159,6 +162,27 @@ class DesktopAppController {
 
     fun setPlayerExpanded(expanded: Boolean) {
         _uiState.update { it.copy(isPlayerExpanded = expanded) }
+    }
+
+    fun togglePortableMiniPlayer() {
+        _uiState.update { it.copy(isPortableMiniPlayerOpen = !it.isPortableMiniPlayerOpen) }
+    }
+
+    fun setPortableMiniPlayerOpen(open: Boolean) {
+        _uiState.update { it.copy(isPortableMiniPlayerOpen = open) }
+    }
+
+    fun toggleFullscreen() {
+        _uiState.update { it.copy(isFullscreen = !it.isFullscreen) }
+    }
+
+    fun resizeWindow(deltaWidthDp: Int, deltaHeightDp: Int) {
+        updateSettings { s ->
+            s.copy(
+                windowWidthDp = (s.windowWidthDp + deltaWidthDp).coerceIn(860, 2560),
+                windowHeightDp = (s.windowHeightDp + deltaHeightDp).coerceIn(580, 1440),
+            )
+        }
     }
 
     fun selectLibraryTab(tab: LibraryTab) {
@@ -254,7 +278,15 @@ class DesktopAppController {
     }
 
     fun setSearchFocused(focused: Boolean) {
-        _uiState.update { it.copy(searchFocused = focused) }
+        blurHideJob?.cancel()
+        if (focused) {
+            _uiState.update { it.copy(searchFocused = true) }
+        } else {
+            blurHideJob = scope.launch {
+                delay(200L)
+                _uiState.update { it.copy(searchFocused = false) }
+            }
+        }
     }
 
     fun selectSearchFilter(filter: DesktopSearchFilter) {
@@ -456,6 +488,23 @@ class DesktopAppController {
             val mutable = state.queue.toMutableList()
             mutable.add(insertAt, song)
             state.copy(queue = mutable)
+        }
+    }
+
+    fun playRandomSong() {
+        val state = _uiState.value
+        val pool = buildList {
+            addAll(state.forYouSuggestions)
+            addAll(state.quickPicks)
+            addAll(state.persisted.likedSongs.map { it.toSongItem() })
+            state.homePage?.sections?.forEach { section ->
+                addAll(section.items.filterIsInstance<SongItem>())
+            }
+        }.distinctBy { it.id }
+
+        if (pool.isNotEmpty()) {
+            val shuffled = pool.shuffled()
+            playSongList(shuffled, startIndex = 0)
         }
     }
 

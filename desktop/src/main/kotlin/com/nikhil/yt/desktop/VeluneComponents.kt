@@ -333,23 +333,6 @@ fun VeluneThumbnail(
                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
-
-        AnimatedVisibility(
-            visible = isActive,
-            enter = fadeIn(tween(250)),
-            exit = fadeOut(tween(250)),
-        ) {
-            Box(
-                modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.55f)),
-                contentAlignment = Alignment.Center,
-            ) {
-                VelunePlayingIndicator(
-                    isPlaying = isPlaying,
-                    color = Color.White,
-                    modifier = Modifier.height(size * 0.36f),
-                )
-            }
-        }
     }
 }
 
@@ -358,11 +341,12 @@ fun VeluneGridCard(
     item: YTItem,
     isActive: Boolean = false,
     isPlaying: Boolean = false,
+    cardWidth: Dp = 172.dp,
     onClick: () -> Unit,
 ) {
     Column(
         modifier = Modifier
-            .width(172.dp)
+            .width(cardWidth)
             .clip(RoundedCornerShape(14.dp))
             .background(MaterialTheme.colorScheme.surfaceContainerLow)
             .clickable(onClick = onClick)
@@ -371,7 +355,7 @@ fun VeluneGridCard(
     ) {
         VeluneThumbnail(
             url = item.thumbnail,
-            size = 152.dp,
+            size = cardWidth - 20.dp,
             cornerRadius = 10.dp,
             isActive = isActive,
             isPlaying = isPlaying,

@@ -3,14 +3,18 @@ package com.nikhil.yt.desktop
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Shapes
 import androidx.compose.material3.Typography
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.unit.dp
 import com.kyant.m3color.hct.Hct
 import com.kyant.m3color.scheme.SchemeTonalSpot
 import kotlinx.coroutines.Dispatchers
@@ -32,15 +36,40 @@ fun VeluneDesktopTheme(
     darkTheme: Boolean = true,
     pureBlack: Boolean = false,
     themeColor: Color = DefaultVeluneThemeColor,
+    themeStyle: VeluneThemeStyle = VeluneThemeStyle.MODERN,
     content: @Composable () -> Unit,
 ) {
-    val baseScheme = remember(themeColor, darkTheme) {
-        buildM3TonalScheme(keyColor = themeColor, isDark = darkTheme)
+    val effectiveSeed = when (themeStyle) {
+        VeluneThemeStyle.RETRO -> if (themeColor == DefaultVeluneThemeColor) Color(0xFFFF9E00) else themeColor
+        VeluneThemeStyle.PIXEL -> if (themeColor == DefaultVeluneThemeColor) Color(0xFF00E676) else themeColor
+        VeluneThemeStyle.MODERN -> themeColor
     }
 
-    val finalScheme = remember(baseScheme, pureBlack, darkTheme) {
-        if (darkTheme && pureBlack) {
-            baseScheme.copy(
+    val baseScheme = remember(effectiveSeed, darkTheme) {
+        buildM3TonalScheme(keyColor = effectiveSeed, isDark = darkTheme)
+    }
+
+    val styledScheme = remember(baseScheme, pureBlack, darkTheme, themeStyle) {
+        when {
+            themeStyle == VeluneThemeStyle.RETRO && darkTheme -> baseScheme.copy(
+                background = Color(0xFF14101C),
+                surface = Color(0xFF1B1526),
+                surfaceContainerLowest = Color(0xFF100C17),
+                surfaceContainerLow = Color(0xFF1E172B),
+                surfaceContainer = Color(0xFF251D36),
+                surfaceContainerHigh = Color(0xFF2F2445),
+                surfaceContainerHighest = Color(0xFF3A2D54),
+            )
+            themeStyle == VeluneThemeStyle.PIXEL && darkTheme -> baseScheme.copy(
+                background = Color(0xFF0B0E0B),
+                surface = Color(0xFF111711),
+                surfaceContainerLowest = Color(0xFF070A07),
+                surfaceContainerLow = Color(0xFF141C14),
+                surfaceContainer = Color(0xFF1A241A),
+                surfaceContainerHigh = Color(0xFF212E21),
+                surfaceContainerHighest = Color(0xFF293829),
+            )
+            darkTheme && pureBlack -> baseScheme.copy(
                 background = Color.Black,
                 surface = Color.Black,
                 surfaceContainerLowest = Color.Black,
@@ -49,16 +78,62 @@ fun VeluneDesktopTheme(
                 surfaceContainerHigh = Color(0xFF181818),
                 surfaceContainerHighest = Color(0xFF202020),
             )
-        } else {
-            baseScheme
+            else -> baseScheme
         }
     }
 
-    val animatedScheme = animateColorScheme(finalScheme)
+    val animatedScheme = animateColorScheme(styledScheme)
+
+    val typography = remember(themeStyle) {
+        when (themeStyle) {
+            VeluneThemeStyle.MODERN -> Typography()
+            VeluneThemeStyle.RETRO, VeluneThemeStyle.PIXEL -> {
+                val base = Typography()
+                Typography(
+                    displayLarge = base.displayLarge.copy(fontFamily = FontFamily.Monospace),
+                    displayMedium = base.displayMedium.copy(fontFamily = FontFamily.Monospace),
+                    displaySmall = base.displaySmall.copy(fontFamily = FontFamily.Monospace),
+                    headlineLarge = base.headlineLarge.copy(fontFamily = FontFamily.Monospace),
+                    headlineMedium = base.headlineMedium.copy(fontFamily = FontFamily.Monospace),
+                    headlineSmall = base.headlineSmall.copy(fontFamily = FontFamily.Monospace),
+                    titleLarge = base.titleLarge.copy(fontFamily = FontFamily.Monospace),
+                    titleMedium = base.titleMedium.copy(fontFamily = FontFamily.Monospace),
+                    titleSmall = base.titleSmall.copy(fontFamily = FontFamily.Monospace),
+                    bodyLarge = base.bodyLarge.copy(fontFamily = FontFamily.Monospace),
+                    bodyMedium = base.bodyMedium.copy(fontFamily = FontFamily.Monospace),
+                    bodySmall = base.bodySmall.copy(fontFamily = FontFamily.Monospace),
+                    labelLarge = base.labelLarge.copy(fontFamily = FontFamily.Monospace),
+                    labelMedium = base.labelMedium.copy(fontFamily = FontFamily.Monospace),
+                    labelSmall = base.labelSmall.copy(fontFamily = FontFamily.Monospace),
+                )
+            }
+        }
+    }
+
+    val shapes = remember(themeStyle) {
+        when (themeStyle) {
+            VeluneThemeStyle.MODERN -> Shapes()
+            VeluneThemeStyle.RETRO -> Shapes(
+                extraSmall = RoundedCornerShape(4.dp),
+                small = RoundedCornerShape(4.dp),
+                medium = RoundedCornerShape(6.dp),
+                large = RoundedCornerShape(8.dp),
+                extraLarge = RoundedCornerShape(10.dp),
+            )
+            VeluneThemeStyle.PIXEL -> Shapes(
+                extraSmall = RoundedCornerShape(0.dp),
+                small = RoundedCornerShape(0.dp),
+                medium = RoundedCornerShape(0.dp),
+                large = RoundedCornerShape(2.dp),
+                extraLarge = RoundedCornerShape(2.dp),
+            )
+        }
+    }
 
     MaterialTheme(
         colorScheme = animatedScheme,
-        typography = Typography(),
+        typography = typography,
+        shapes = shapes,
         content = content,
     )
 }

@@ -1,8 +1,11 @@
 package com.nikhil.yt.desktop
 
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -26,6 +29,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Casino
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
@@ -37,6 +41,7 @@ import androidx.compose.material.icons.filled.Shuffle
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -57,11 +62,21 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import kotlin.math.PI
+import kotlin.math.atan2
+import kotlin.math.cos
+import kotlin.math.hypot
+import kotlin.math.min
+import kotlin.math.sin
 import com.nikhil.yt.innertube.models.SongItem
 import com.nikhil.yt.innertube.models.filterExplicit
 import com.nikhil.yt.innertube.pages.MoodAndGenres
@@ -72,21 +87,24 @@ fun HomeScreen(
     playbackState: PlaybackState,
     controller: DesktopAppController,
 ) {
-    val hideExplicit = uiState.persisted.settings.hideExplicit
+    val settings = uiState.persisted.settings
+    val hideExplicit = settings.hideExplicit
+    val cardWidth = settings.cardDensity.cardWidthDp.dp
     val activeSongId = playbackState.currentSong?.id
 
     when {
         uiState.homeLoading && uiState.homePage == null -> HomeShimmerSkeleton()
         uiState.homeError != null && uiState.homePage == null -> ErrorBox(uiState.homeError, onRetry = { controller.loadHome() })
         else -> {
-            LazyColumn(
-                contentPadding = PaddingValues(24.dp),
-                verticalArrangement = Arrangement.spacedBy(26.dp),
-                modifier = Modifier.fillMaxSize(),
-            ) {
+            Box(modifier = Modifier.fillMaxSize()) {
+                LazyColumn(
+                    contentPadding = PaddingValues(start = 24.dp, end = 24.dp, top = 24.dp, bottom = 92.dp),
+                    verticalArrangement = Arrangement.spacedBy(26.dp),
+                    modifier = Modifier.fillMaxSize(),
+                ) {
                 // Home Category Chips (Relax, Energize, Workout, Focus, Commute...)
                 val chips = uiState.homePage?.chips.orEmpty()
-                if (chips.isNotEmpty()) {
+                if (settings.showHomeChips && chips.isNotEmpty()) {
                     item {
                         LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             items(chips) { chip ->
@@ -102,7 +120,7 @@ fun HomeScreen(
                 }
 
                 // Quick Picks (4-row horizontal grid like Android HomeScreen)
-                if (uiState.quickPicks.isNotEmpty()) {
+                if (settings.showQuickPicks && uiState.quickPicks.isNotEmpty()) {
                     item {
                         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                             SectionHeader(
@@ -138,7 +156,7 @@ fun HomeScreen(
                 }
 
                 // For You (Velune Suggestion Engine)
-                if (uiState.forYouSuggestions.isNotEmpty()) {
+                if (settings.showMadeForYou && uiState.forYouSuggestions.isNotEmpty()) {
                     item {
                         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                             SectionHeader(
@@ -152,6 +170,7 @@ fun HomeScreen(
                                         item = song,
                                         isActive = song.id == activeSongId,
                                         isPlaying = playbackState.isPlaying,
+                                        cardWidth = cardWidth,
                                         onClick = { controller.playSingleSong(song) },
                                     )
                                 }
@@ -161,7 +180,7 @@ fun HomeScreen(
                 }
 
                 // Forgotten Favorites
-                if (uiState.forgottenFavorites.isNotEmpty()) {
+                if (settings.showForgottenFavorites && uiState.forgottenFavorites.isNotEmpty()) {
                     item {
                         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                             SectionHeader(title = "Forgotten Favorites")
@@ -171,6 +190,7 @@ fun HomeScreen(
                                         item = song,
                                         isActive = song.id == activeSongId,
                                         isPlaying = playbackState.isPlaying,
+                                        cardWidth = cardWidth,
                                         onClick = { controller.playSingleSong(song) },
                                     )
                                 }
@@ -198,6 +218,7 @@ fun HomeScreen(
                                         item = item,
                                         isActive = item.id == activeSongId,
                                         isPlaying = playbackState.isPlaying,
+                                        cardWidth = cardWidth,
                                         onClick = { controller.openItem(item) },
                                     )
                                 }
@@ -205,6 +226,18 @@ fun HomeScreen(
                         }
                     }
                 }
+            }
+
+                ExtendedFloatingActionButton(
+                    onClick = controller::playRandomSong,
+                    icon = { Icon(Icons.Default.Casino, contentDescription = "Random") },
+                    text = { Text("Random") },
+                    containerColor = MaterialTheme.colorScheme.primaryContainer,
+                    contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .padding(24.dp),
+                )
             }
         }
     }
@@ -759,6 +792,19 @@ fun SettingsScreen(
                     }
                 }
 
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Theme Style", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        VeluneThemeStyle.entries.forEach { style ->
+                            FilterChip(
+                                selected = settings.themeStyle == style,
+                                onClick = { controller.updateSettings { it.copy(themeStyle = style) } },
+                                label = { Text(style.label) },
+                            )
+                        }
+                    }
+                }
+
                 SettingsToggleRow(
                     title = "Pure Black (OLED)",
                     subtitle = "Use true #000000 background in Dark mode",
@@ -774,8 +820,18 @@ fun SettingsScreen(
                 )
 
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text("Accent Color Preset", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
-                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    var showColorWheel by remember { mutableStateOf(false) }
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text("Accent Color & Color Wheel", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                        TextButton(onClick = { showColorWheel = !showColorWheel }) {
+                            Text(if (showColorWheel) "Hide Color Wheel" else "Open Color Wheel")
+                        }
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
                         VelunePresetColors.forEach { (name, color) ->
                             val argb = color.toArgb().toLong() and 0xFFFFFFFFL
                             val selected = !settings.dynamicThemeFromArtwork && (settings.themeColorArgb and 0xFFFFFFFFL) == argb
@@ -803,6 +859,20 @@ fun SettingsScreen(
                                 }
                             }
                         }
+                    }
+                    if (showColorWheel) {
+                        AccentColorWheelPicker(
+                            currentColor = Color(settings.themeColorArgb.toInt()),
+                            onColorSelected = { picked ->
+                                val argb = picked.toArgb().toLong() and 0xFFFFFFFFL
+                                controller.updateSettings {
+                                    it.copy(
+                                        dynamicThemeFromArtwork = false,
+                                        themeColorArgb = argb,
+                                    )
+                                }
+                            },
+                        )
                     }
                 }
             }
@@ -839,16 +909,262 @@ fun SettingsScreen(
             }
         }
 
-        // Content
+        // Desktop Layout Customization
         item {
-            SettingsCard("Content") {
+            SettingsCard("Desktop Layout") {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Navigation Style", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        NavigationLayoutStyle.entries.forEach { navStyle ->
+                            FilterChip(
+                                selected = settings.navigationLayoutStyle == navStyle,
+                                onClick = { controller.updateSettings { it.copy(navigationLayoutStyle = navStyle) } },
+                                label = { Text(navStyle.label) },
+                            )
+                        }
+                    }
+                }
+
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Card Size", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        CardDensity.entries.forEach { density ->
+                            FilterChip(
+                                selected = settings.cardDensity == density,
+                                onClick = { controller.updateSettings { it.copy(cardDensity = density) } },
+                                label = { Text(density.label) },
+                            )
+                        }
+                    }
+                }
+
+                SettingsToggleRow(
+                    title = "Show Home Category Chips",
+                    subtitle = "Display Relax, Energize, Workout, and Focus mood chips on Home",
+                    checked = settings.showHomeChips,
+                    onCheckedChange = { v -> controller.updateSettings { it.copy(showHomeChips = v) } },
+                )
+                SettingsToggleRow(
+                    title = "Show Quick Picks",
+                    subtitle = "Display the 4-row Quick Picks grid on Home",
+                    checked = settings.showQuickPicks,
+                    onCheckedChange = { v -> controller.updateSettings { it.copy(showQuickPicks = v) } },
+                )
+                SettingsToggleRow(
+                    title = "Show Made For You",
+                    subtitle = "Display personalized For You mixes on Home",
+                    checked = settings.showMadeForYou,
+                    onCheckedChange = { v -> controller.updateSettings { it.copy(showMadeForYou = v) } },
+                )
+                SettingsToggleRow(
+                    title = "Show Forgotten Favorites",
+                    subtitle = "Display tracks you loved in the past",
+                    checked = settings.showForgottenFavorites,
+                    onCheckedChange = { v -> controller.updateSettings { it.copy(showForgottenFavorites = v) } },
+                )
+            }
+        }
+
+        // Portable & Customizable MiniPlayer
+        item {
+            SettingsCard("Portable & Customizable MiniPlayer") {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("MiniPlayer Bar Style", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        MiniPlayerStyle.entries.forEach { mpStyle ->
+                            FilterChip(
+                                selected = settings.miniPlayerStyle == mpStyle,
+                                onClick = { controller.updateSettings { it.copy(miniPlayerStyle = mpStyle) } },
+                                label = { Text(mpStyle.label) },
+                            )
+                        }
+                    }
+                }
+
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Portable MiniPlayer Mode", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        PortableMiniMode.entries.forEach { mode ->
+                            FilterChip(
+                                selected = settings.portableMiniMode == mode,
+                                onClick = { controller.updateSettings { it.copy(portableMiniMode = mode) } },
+                                label = { Text(mode.label) },
+                            )
+                        }
+                    }
+                }
+
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Portable MiniPlayer Size (Card Mode)", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        PortableMiniSize.entries.forEach { sz ->
+                            FilterChip(
+                                selected = settings.portableMiniSize == sz,
+                                onClick = { controller.updateSettings { it.copy(portableMiniSize = sz) } },
+                                label = { Text(sz.label) },
+                            )
+                        }
+                    }
+                }
+
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Screen Corner / Anchor", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        items(IslandAnchor.entries) { anchor ->
+                            FilterChip(
+                                selected = settings.islandAnchor == anchor,
+                                onClick = { controller.updateSettings { it.copy(islandAnchor = anchor) } },
+                                label = { Text(anchor.label) },
+                            )
+                        }
+                    }
+                }
+
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("MiniPlayer Theme", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        items(MiniPlayerThemeMode.entries) { mpTheme ->
+                            FilterChip(
+                                selected = settings.miniPlayerThemeMode == mpTheme,
+                                onClick = { controller.updateSettings { it.copy(miniPlayerThemeMode = mpTheme) } },
+                                label = { Text(mpTheme.label) },
+                            )
+                        }
+                    }
+                }
+
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("MiniPlayer Icon Style", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        MiniPlayerIconStyle.entries.forEach { iconStyle ->
+                            FilterChip(
+                                selected = settings.miniPlayerIconStyle == iconStyle,
+                                onClick = { controller.updateSettings { it.copy(miniPlayerIconStyle = iconStyle) } },
+                                label = { Text(iconStyle.label) },
+                            )
+                        }
+                    }
+                }
+
+                SettingsToggleRow(
+                    title = "Show Mini Lyrics in Portable MiniPlayer",
+                    subtitle = "Display live synced lyrics inside the Floating Card or Mac Dynamic Island",
+                    checked = settings.miniPlayerShowLyrics,
+                    onCheckedChange = { v -> controller.updateSettings { it.copy(miniPlayerShowLyrics = v) } },
+                )
+                SettingsToggleRow(
+                    title = "Always On Top (Portable Mini Window)",
+                    subtitle = "Keep the popped-out MiniPlayer floating above other apps",
+                    checked = settings.miniPlayerAlwaysOnTop,
+                    onCheckedChange = { v -> controller.updateSettings { it.copy(miniPlayerAlwaysOnTop = v) } },
+                )
+                SettingsToggleRow(
+                    title = "Show Waveform Equalizer in Portable Mini",
+                    subtitle = "Display animated playing bars inside the floating MiniPlayer",
+                    checked = settings.miniPlayerShowWaveform,
+                    onCheckedChange = { v -> controller.updateSettings { it.copy(miniPlayerShowWaveform = v) } },
+                )
+                Button(onClick = controller::togglePortableMiniPlayer) {
+                    Text(if (uiState.isPortableMiniPlayerOpen) "Close Portable MiniPlayer" else "Launch Portable MiniPlayer")
+                }
+            }
+        }
+
+        // Content & Shortcuts
+        item {
+            SettingsCard("Content & Keyboard Shortcuts") {
                 SettingsToggleRow(
                     title = "Hide Explicit Content",
                     subtitle = "Filter explicit songs and albums from Home, Search, and Suggestions",
                     checked = settings.hideExplicit,
                     onCheckedChange = { v -> controller.updateSettings { it.copy(hideExplicit = v) } },
                 )
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text("Shortcuts", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                    Text("F11: Toggle Fullscreen  •  Esc: Exit Fullscreen / Close Now Playing", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("Ctrl + + / Ctrl + -: Resize Window", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("Ctrl + Right / Left: Next / Previous Track", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("Ctrl + Up / Down: Volume Up / Down  •  Ctrl + Space: Play / Pause", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("Ctrl + L: Now Playing & Lyrics  •  Ctrl + M: Portable MiniPlayer", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
             }
+        }
+    }
+}
+
+@Composable
+private fun AccentColorWheelPicker(
+    currentColor: Color,
+    onColorSelected: (Color) -> Unit,
+) {
+    val hueColors = remember {
+        listOf(
+            Color.Red,
+            Color.Yellow,
+            Color.Green,
+            Color.Cyan,
+            Color.Blue,
+            Color.Magenta,
+            Color.Red,
+        )
+    }
+
+    var boxSizePx by remember { mutableStateOf(180f) }
+
+    fun pickAt(offset: Offset) {
+        val radius = boxSizePx / 2f
+        if (radius <= 1f) return
+        val dx = offset.x - radius
+        val dy = offset.y - radius
+        val dist = hypot(dx, dy).coerceAtMost(radius)
+        val sat = (dist / radius).coerceIn(0f, 1f)
+        var angleDeg = Math.toDegrees(atan2(dy.toDouble(), dx.toDouble())).toFloat()
+        if (angleDeg < 0f) angleDeg += 360f
+        val rgbInt = java.awt.Color.HSBtoRGB(angleDeg / 360f, sat, 0.96f)
+        onColorSelected(Color(rgbInt))
+    }
+
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(18.dp),
+        modifier = Modifier.padding(top = 6.dp),
+    ) {
+        Canvas(
+            modifier = Modifier
+                .size(164.dp)
+                .clip(CircleShape)
+                .onSizeChanged { boxSizePx = min(it.width, it.height).toFloat().coerceAtLeast(1f) }
+                .pointerInput(Unit) {
+                    detectTapGestures { offset -> pickAt(offset) }
+                }
+                .pointerInput(Unit) {
+                    detectDragGestures { change, _ ->
+                        change.consume()
+                        pickAt(change.position)
+                    }
+                },
+        ) {
+            drawCircle(brush = Brush.sweepGradient(hueColors))
+            drawCircle(
+                brush = Brush.radialGradient(
+                    colors = listOf(Color.White, Color.Transparent),
+                )
+            )
+        }
+
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Box(
+                modifier = Modifier
+                    .size(44.dp)
+                    .clip(CircleShape)
+                    .background(currentColor)
+                    .border(2.dp, MaterialTheme.colorScheme.onSurface, CircleShape),
+            )
+            Text(
+                text = "Drag or click wheel\nto pick custom color",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
     }
 }

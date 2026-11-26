@@ -16,6 +16,36 @@ enum class ThemeMode(val label: String) {
     LIGHT("Light"),
 }
 
+enum class VeluneThemeStyle(val label: String) {
+    MODERN("Modern"),
+    RETRO("Retro"),
+    PIXEL("Pixelated"),
+}
+
+enum class IslandAnchor(val label: String) {
+    TOP_CENTER("Top Center"),
+    TOP_LEFT("Top Left"),
+    TOP_RIGHT("Top Right"),
+    BOTTOM_CENTER("Bottom Center"),
+    BOTTOM_LEFT("Bottom Left"),
+    BOTTOM_RIGHT("Bottom Right"),
+}
+
+enum class MiniPlayerThemeMode(val label: String) {
+    MATCH_APP("Match App"),
+    DARK("Dark"),
+    LIGHT("Light"),
+    AMOLED("Pure Black"),
+    RETRO("Retro"),
+    PIXEL("Pixelated"),
+}
+
+enum class MiniPlayerIconStyle(val label: String) {
+    FILLED("Filled"),
+    OUTLINED("Outlined"),
+    MINIMAL("Minimal"),
+}
+
 enum class PlayerBackgroundStyle(val label: String) {
     GRADIENT("Gradient"),
     GLOW("Ambient Glow"),
@@ -27,6 +57,35 @@ enum class SliderStyle(val label: String) {
     SQUIGGLY("Squiggly"),
     DEFAULT("Default"),
     SLIM("Slim"),
+}
+
+enum class NavigationLayoutStyle(val label: String) {
+    RAIL("Compact Rail"),
+    SIDEBAR("Expanded Sidebar"),
+    TOP_TABS("Top Bar"),
+}
+
+enum class CardDensity(val label: String, val cardWidthDp: Int) {
+    COMPACT("Compact", 148),
+    COMFORTABLE("Comfortable", 172),
+    LARGE("Large", 200),
+}
+
+enum class MiniPlayerStyle(val label: String) {
+    FLOATING_PILL("Floating Pill"),
+    GLASS("Glass Bar"),
+    CLASSIC("Classic Bar"),
+}
+
+enum class PortableMiniMode(val label: String) {
+    CARD("Floating Card"),
+    DYNAMIC_ISLAND("Mac Dynamic Island"),
+}
+
+enum class PortableMiniSize(val label: String, val widthDp: Int, val heightDp: Int) {
+    COMPACT("Compact", 380, 152),
+    MEDIUM("Medium", 460, 184),
+    LARGE("Large", 560, 216),
 }
 
 enum class RepeatMode {
@@ -104,11 +163,29 @@ data class StoredPlaylist(
 @Serializable
 data class DesktopSettings(
     val themeMode: ThemeMode = ThemeMode.DARK,
+    val themeStyle: VeluneThemeStyle = VeluneThemeStyle.MODERN,
     val pureBlack: Boolean = false,
     val dynamicThemeFromArtwork: Boolean = true,
     val themeColorArgb: Long = 0xFFED5564,
     val playerBackgroundStyle: PlayerBackgroundStyle = PlayerBackgroundStyle.GRADIENT,
     val sliderStyle: SliderStyle = SliderStyle.SQUIGGLY,
+    val navigationLayoutStyle: NavigationLayoutStyle = NavigationLayoutStyle.RAIL,
+    val cardDensity: CardDensity = CardDensity.COMFORTABLE,
+    val miniPlayerStyle: MiniPlayerStyle = MiniPlayerStyle.FLOATING_PILL,
+    val portableMiniMode: PortableMiniMode = PortableMiniMode.CARD,
+    val portableMiniSize: PortableMiniSize = PortableMiniSize.MEDIUM,
+    val islandAnchor: IslandAnchor = IslandAnchor.TOP_CENTER,
+    val miniPlayerThemeMode: MiniPlayerThemeMode = MiniPlayerThemeMode.MATCH_APP,
+    val miniPlayerIconStyle: MiniPlayerIconStyle = MiniPlayerIconStyle.FILLED,
+    val miniPlayerAlwaysOnTop: Boolean = true,
+    val miniPlayerShowWaveform: Boolean = true,
+    val miniPlayerShowLyrics: Boolean = true,
+    val windowWidthDp: Int = 1280,
+    val windowHeightDp: Int = 840,
+    val showHomeChips: Boolean = true,
+    val showQuickPicks: Boolean = true,
+    val showMadeForYou: Boolean = true,
+    val showForgottenFavorites: Boolean = true,
     val hideExplicit: Boolean = false,
     val volume: Float = 0.85f,
     val shuffleEnabled: Boolean = false,

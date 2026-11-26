@@ -62,6 +62,7 @@ class DesktopAudioPlayer(
     @Volatile private var activeUserAgent: String = YouTubeClient.USER_AGENT_WEB
     @Volatile private var playbackStartedAtMs: Long = 0L
     @Volatile private var playbackBaseOffsetMs: Long = 0L
+    @Volatile private var reconnectAttempts: Int = 0
 
     private val ffplayExecutable: String by lazy { findFfplayExecutable() }
 
@@ -156,10 +157,16 @@ class DesktopAudioPlayer(
 
     fun seekTo(positionMs: Long) {
         val current = _state.value
-        if (current.currentSong == null || activeStreamUrl == null || isShutdown.get()) return
+        if (current.currentSong == null || isShutdown.get()) return
         val clamped = positionMs.coerceIn(0L, current.durationMs.coerceAtLeast(1L))
+        playbackBaseOffsetMs = clamped
+        playbackStartedAtMs = System.currentTimeMillis()
         _state.update { it.copy(positionMs = clamped) }
         if (current.isPlaying) {
+            if (activeStreamUrl == null) {
+                play(current.currentSong)
+                return
+            }
             val myGen = generation.incrementAndGet()
             scope.launch {
                 startFfplayAt(offsetMs = clamped, expectedGen = myGen)
@@ -207,7 +214,10 @@ class DesktopAudioPlayer(
         scope.cancel()
     }
 
-    private suspend fun startFfplayAt(offsetMs: Long, expectedGen: Long) = withContext(Dispatchers.IO) {
+    private suspend fun startFfplayAt(offsetMs: Long, expectedGen: Long, isReconnect: Boolean = false): Unit = withContext(Dispatchers.IO) {
+        if (!isReconnect) {
+            reconnectAttempts = 0
+        }
         val url = activeStreamUrl ?: return@withContext
         val userAgent = activeUserAgent
         val volPercent = (_state.value.volume * 100f).toInt().coerceIn(0, 100)
@@ -220,6 +230,14 @@ class DesktopAudioPlayer(
             add("-loglevel")
             add("quiet")
             add("-vn")
+            add("-reconnect")
+            add("1")
+            add("-reconnect_streamed")
+            add("1")
+            add("-reconnect_at_eof")
+            add("1")
+            add("-reconnect_delay_max")
+            add("5")
             add("-user_agent")
             add(userAgent)
             if (offsetMs > 0L) {
@@ -267,14 +285,43 @@ class DesktopAudioPlayer(
                 delay(250L)
             }
 
-            if (expectedGen == generation.get() && !isShutdown.get()) {
-                val exitCode = runCatching { startedProcess.waitFor() }.getOrDefault(-1)
-                activeProcesses.remove(startedProcess)
-                if (expectedGen == generation.get() && !isShutdown.get()) {
-                    _state.update { it.copy(isPlaying = false) }
-                    if (exitCode == 0) {
-                        onTrackEnded()
+            if (expectedGen != generation.get() || isShutdown.get()) {
+                return@launch
+            }
+
+            val exitCode = runCatching { startedProcess.waitFor() }.getOrDefault(-1)
+            activeProcesses.remove(startedProcess)
+            if (expectedGen != generation.get() || isShutdown.get()) {
+                return@launch
+            }
+
+            val pos = computeCurrentPositionMs()
+            val dur = _state.value.durationMs
+            val endedPrematurely = dur > 15_000L && pos < dur - 3_500L
+
+            if (endedPrematurely && reconnectAttempts < 5) {
+                reconnectAttempts++
+                delay(400L)
+                if (expectedGen != generation.get() || isShutdown.get()) return@launch
+
+                // Re-resolve stream URL on retry in case CDN URL expired after pause/long playback
+                if (reconnectAttempts >= 2) {
+                    val songId = _state.value.currentSong?.id
+                    if (songId != null) {
+                        resolveStream(songId)?.let { fresh ->
+                            activeStreamUrl = fresh.url
+                            activeUserAgent = fresh.userAgent
+                        }
                     }
+                }
+                if (expectedGen == generation.get() && !isShutdown.get()) {
+                    startFfplayAt(offsetMs = pos, expectedGen = expectedGen, isReconnect = true)
+                }
+            } else {
+                reconnectAttempts = 0
+                _state.update { it.copy(isPlaying = false) }
+                if (!endedPrematurely && (exitCode == 0 || dur > 0L)) {
+                    onTrackEnded()
                 }
             }
         }
