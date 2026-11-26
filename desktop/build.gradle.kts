@@ -88,3 +88,55 @@ compose.desktop {
         }
     }
 }
+
+val windowsX64ReleaseDir = layout.buildDirectory.dir("releases/windows-x64")
+
+tasks.register("verifyWindowsX64Environment") {
+    group = "compose desktop"
+    description = "Verifies that the build host and JDK target Windows x64 (amd64)."
+    doLast {
+        val osName = System.getProperty("os.name").lowercase()
+        val osArch = System.getProperty("os.arch").lowercase()
+        require(osName.contains("win")) { "Windows x64 packaging requires Windows (detected: $osName)" }
+        require(osArch == "amd64" || osArch == "x86_64") {
+            "Windows x64 packaging requires an x64/amd64 JDK (detected: $osArch)"
+        }
+    }
+}
+
+tasks.register<Zip>("packageWindowsX64PortableZip") {
+    group = "compose desktop"
+    description = "Packages the Windows x64 portable app image and bundled runtime into a ZIP archive."
+    dependsOn("verifyWindowsX64Environment", "createDistributable")
+    from(layout.buildDirectory.dir("compose/binaries/main/app/Velune"))
+    into("Velune")
+    archiveFileName.set("Velune-Portable-$desktopVersion-x64.zip")
+    destinationDirectory.set(windowsX64ReleaseDir)
+}
+
+tasks.register("packageWindowsX64Release") {
+    group = "compose desktop"
+    description = "Builds Windows x64 EXE, MSI, portable image, and portable ZIP into build/releases/windows-x64."
+    dependsOn("verifyWindowsX64Environment", "packageExe", "packageMsi", "packageWindowsX64PortableZip")
+    doLast {
+        val outDir = windowsX64ReleaseDir.get().asFile
+        outDir.mkdirs()
+
+        val exeSrc = layout.buildDirectory.dir("compose/binaries/main/exe").get().asFile
+            .listFiles { f -> f.extension.equals("exe", ignoreCase = true) }?.firstOrNull()
+            ?: error("Generated EXE installer not found under build/compose/binaries/main/exe")
+        val msiSrc = layout.buildDirectory.dir("compose/binaries/main/msi").get().asFile
+            .listFiles { f -> f.extension.equals("msi", ignoreCase = true) }?.firstOrNull()
+            ?: error("Generated MSI installer not found under build/compose/binaries/main/msi")
+
+        val exeDst = File(outDir, "Velune-Setup-$desktopVersion-x64.exe")
+        val msiDst = File(outDir, "Velune-$desktopVersion-x64.msi")
+        exeSrc.copyTo(exeDst, overwrite = true)
+        msiSrc.copyTo(msiDst, overwrite = true)
+
+        println("Windows x64 release artifacts written to: ${outDir.absolutePath}")
+        println(" - ${exeDst.name}")
+        println(" - ${msiDst.name}")
+        println(" - Velune-Portable-$desktopVersion-x64.zip")
+    }
+}
