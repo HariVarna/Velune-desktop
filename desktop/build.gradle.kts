@@ -35,16 +35,56 @@ dependencies {
     testImplementation(libs.junit)
 }
 
+val desktopVersion = providers.gradleProperty("veluneDesktopVersion").getOrElse("1.1.2")
+
 compose.desktop {
     application {
         mainClass = "com.nikhil.yt.desktop.MainKt"
         jvmArgs += listOf("-Djava.awt.headless=false", "-Xmx1024m")
 
+        buildTypes.release.proguard {
+            configurationFiles.from(project.file("proguard-rules.pro"))
+        }
+
         nativeDistributions {
             targetFormats(TargetFormat.Msi, TargetFormat.Exe, TargetFormat.Dmg, TargetFormat.Deb)
             packageName = "Velune"
-            packageVersion = "1.1.2"
+            packageVersion = desktopVersion
             description = "Velune YouTube Music Desktop Client"
+            vendor = "HariVarna (Fork of Velune by Nikhil)"
+            copyright = "Copyright (C) 2026 Velune Contributors - GPL-3.0"
+            licenseFile.set(rootProject.file("LICENSE"))
+
+            includeAllModules = true
+
+            val appResourcesDir = project.layout.projectDirectory.dir("appResources")
+            if (appResourcesDir.asFile.exists()) {
+                appResourcesRootDir.set(appResourcesDir)
+            }
+
+            windows {
+                iconFile.set(project.file("icons/velune.ico"))
+                menuGroup = "Velune"
+                menu = true
+                shortcut = true
+                dirChooser = true
+                perUserInstall = true
+                upgradeUuid = "8f4b2c1a-7d3e-4e9a-9b2f-6c1d8e5a3f01"
+            }
+
+            macOS {
+                bundleID = "com.nikhil.yt.desktop"
+                val icns = project.file("icons/velune.icns")
+                if (icns.exists()) {
+                    iconFile.set(icns)
+                }
+            }
+
+            linux {
+                packageName = "velune"
+                iconFile.set(project.file("icons/velune.png"))
+                menuGroup = "AudioVideo"
+            }
         }
     }
 }

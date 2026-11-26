@@ -9,6 +9,8 @@
 /canvas/build
 /simpmusic/build
 /innertube/build
+/desktop/build
+desktop/appResources/
 
 # --- Standard Android Ignores ---
 *.apk

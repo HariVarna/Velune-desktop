@@ -438,10 +438,26 @@ class DesktopAudioPlayer(
     }
 
     private fun findFfplayExecutable(): String {
-        val localAppData = System.getenv("LOCALAPPDATA")
-        if (!localAppData.isNullOrBlank()) {
-            val wingetLink = File(localAppData, "Microsoft/WinGet/Links/ffplay.exe")
-            if (wingetLink.exists()) return wingetLink.absolutePath
+        val isWindows = System.getProperty("os.name").lowercase().contains("win")
+        val exeName = if (isWindows) "ffplay.exe" else "ffplay"
+
+        val resourcesDir = System.getProperty("compose.application.resources.dir")
+        if (!resourcesDir.isNullOrBlank()) {
+            val bundled = File(resourcesDir, exeName)
+            if (bundled.exists()) {
+                if (!isWindows && !bundled.canExecute()) {
+                    runCatching { bundled.setExecutable(true) }
+                }
+                return bundled.absolutePath
+            }
+        }
+
+        if (isWindows) {
+            val localAppData = System.getenv("LOCALAPPDATA")
+            if (!localAppData.isNullOrBlank()) {
+                val wingetLink = File(localAppData, "Microsoft/WinGet/Links/ffplay.exe")
+                if (wingetLink.exists()) return wingetLink.absolutePath
+            }
         }
         return "ffplay"
     }

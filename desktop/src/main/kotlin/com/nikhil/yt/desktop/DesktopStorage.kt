@@ -210,9 +210,33 @@ class DesktopStorage {
     }
 
     private val storageFile: File by lazy {
-        val dir = File(System.getProperty("user.home"), ".velune-desktop")
+        val dir = resolvePerUserDataDir()
         if (!dir.exists()) dir.mkdirs()
-        File(dir, "state.json")
+        val target = File(dir, "state.json")
+        if (!target.exists()) {
+            val legacy = File(System.getProperty("user.home"), ".velune-desktop/state.json")
+            if (legacy.exists()) {
+                runCatching { legacy.copyTo(target, overwrite = false) }
+            }
+        }
+        target
+    }
+
+    private fun resolvePerUserDataDir(): File {
+        val os = System.getProperty("os.name").lowercase()
+        return when {
+            os.contains("win") -> {
+                val localAppData = System.getenv("LOCALAPPDATA")
+                if (!localAppData.isNullOrBlank()) File(localAppData, "Velune")
+                else File(System.getProperty("user.home"), "AppData/Local/Velune")
+            }
+            os.contains("mac") -> File(System.getProperty("user.home"), "Library/Application Support/Velune")
+            else -> {
+                val xdgData = System.getenv("XDG_DATA_HOME")
+                if (!xdgData.isNullOrBlank()) File(xdgData, "Velune")
+                else File(System.getProperty("user.home"), ".local/share/Velune")
+            }
+        }
     }
 
     fun load(): DesktopPersistedState {

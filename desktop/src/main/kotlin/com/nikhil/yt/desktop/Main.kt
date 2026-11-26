@@ -54,6 +54,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.painter.BitmapPainter
+import androidx.compose.ui.graphics.toComposeImageBitmap
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.isCtrlPressed
@@ -102,6 +104,8 @@ fun main() = application {
         }
     }
 
+    val appIcon = remember { loadVeluneWindowIcon() }
+
     Window(
         onCloseRequest = {
             controller.shutdown()
@@ -109,6 +113,7 @@ fun main() = application {
             exitProcess(0)
         },
         title = "Velune",
+        icon = appIcon,
         state = windowState,
         onPreviewKeyEvent = { event ->
             if (event.type != KeyEventType.KeyDown) return@Window false
@@ -478,4 +483,13 @@ private fun TopSearchBar(
             }
         }
     }
+}
+
+internal fun loadVeluneWindowIcon(): BitmapPainter? {
+    return runCatching {
+        val stream = DesktopAppController::class.java.classLoader.getResourceAsStream("velune.png")
+            ?: return@runCatching null
+        val bytes = stream.use { it.readBytes() }
+        BitmapPainter(org.jetbrains.skia.Image.makeFromEncoded(bytes).toComposeImageBitmap())
+    }.getOrNull()
 }

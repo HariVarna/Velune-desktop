@@ -400,9 +400,12 @@ fun PortableMiniPlayerWindow(
         Color(settings.themeColorArgb.toInt())
     }
 
+    val appIcon = remember { loadVeluneWindowIcon() }
+
     Window(
         onCloseRequest = { controller.setPortableMiniPlayerOpen(false) },
         title = "Velune Mini",
+        icon = appIcon,
         undecorated = true,
         transparent = true,
         resizable = true,
