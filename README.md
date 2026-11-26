@@ -1,7 +1,7 @@
 
 <div align="center">
 
- <img src="https://raw.githubusercontent.com/nikhilvishwakarma00/Velune/main/fastlane/metadata/android/en-US/images/icon.png" width="110" />
+ <img src="https://raw.githubusercontent.com/HariVarna/Velune-desktop/main/fastlane/metadata/android/en-US/images/icon.png" width="110" />
 
 </div>
 
@@ -25,10 +25,10 @@
 
 <div align="center">
 
-![Release](https://img.shields.io/github/v/release/nikhilvishwakarma00/Velune?style=for-the-badge&logo=github&logoColor=white&labelColor=18181B&color=3B82F6)
-![Downloads](https://img.shields.io/github/downloads/nikhilvishwakarma00/Velune/total?style=for-the-badge&logo=github&logoColor=white&labelColor=18181B&color=10B981)
-![Stars](https://img.shields.io/github/stars/nikhilvishwakarma00/Velune?style=for-the-badge&logo=github&logoColor=white&labelColor=18181B&color=F59E0B)
-![License](https://img.shields.io/github/license/nikhilvishwakarma00/Velune?style=for-the-badge&labelColor=18181B&color=EF4444)
+![Release](https://img.shields.io/github/v/release/HariVarna/Velune-desktop?style=for-the-badge&logo=github&logoColor=white&labelColor=18181B&color=3B82F6)
+![Downloads](https://img.shields.io/github/downloads/HariVarna/Velune-desktop/total?style=for-the-badge&logo=github&logoColor=white&labelColor=18181B&color=10B981)
+![Stars](https://img.shields.io/github/stars/HariVarna/Velune-desktop?style=for-the-badge&logo=github&logoColor=white&labelColor=18181B&color=F59E0B)
+![License](https://img.shields.io/github/license/HariVarna/Velune-desktop?style=for-the-badge&labelColor=18181B&color=EF4444)
 
 <br>
 
@@ -43,18 +43,11 @@
 <br>
 <hr>
 
-⚠️ Official Velune Notice
+⚠️ Fork & Upstream Notice
 
-This is the official Velune repository, maintained by Nikhil Vishwakarma.
+This repository (`HariVarna/Velune-desktop`) is an independent **fork** of [Velune](https://github.com/nikhilvishwakarma00/Velune) by Nikhil Vishwakarma, adding a Compose Multiplatform Desktop client alongside the Android app.
 
-Official source code & releases:
-https://github.com/nikhilvishwakarma00/Velune
-
-Please be cautious of third-party websites or downloads using the Velune name that are not linked from this repository.
-
-In particular, https://velune.cc  is not operated or maintained by me, and I am not affiliated with that website.
-
-For your safety, download Velune only from the official GitHub releases
+Releases published from `HariVarna/Velune-desktop` are **fork releases** and are **not** official upstream Velune releases. For official upstream Android releases, visit https://github.com/nikhilvishwakarma00/Velune.
 
 <hr>
 <br>
@@ -64,35 +57,25 @@ For your safety, download Velune only from the official GitHub releases
 
 <div align="center">
 
-<h2>Stable Release</h2>
+<h2>Fork Release</h2>
 
 <table>
   <thead>
     <tr>
-      <th align="center">Obtainium</th>
-      <th align="center">IzzyOnDroid</th>
+      <th align="center">Obtainium (Fork)</th>
+      <th align="center">GitHub Releases (Fork)</th>
     </tr>
   </thead>
   <tbody>
     <tr>
       <td align="center">
-        <a href="https://apps.obtainium.imranr.dev/redirect?r=obtainium://add/https://github.com/nikhilvishwakarma00/Velune">
-          <img src="https://raw.githubusercontent.com/ImranR98/Obtainium/main/assets/graphics/badge_obtainium.png" height="50" alt="Get Velune on Obtainium">
+        <a href="https://apps.obtainium.imranr.dev/redirect?r=obtainium://add/https://github.com/HariVarna/Velune-desktop">
+          <img src="https://raw.githubusercontent.com/ImranR98/Obtainium/main/assets/graphics/badge_obtainium.png" height="50" alt="Get Fork on Obtainium">
         </a>
       </td>
       <td align="center">
-        <a href="https://apt.izzysoft.de/fdroid/index/apk/com.nikhil.yt">
-          <img src="assets/IzzyOnDroidButtonBorder.svg" height="50" alt="Get Velune on IzzyOnDroid">
-        </a>
-      </td>
-    </tr>
-    <tr>
-      <th align="center" colspan="2">GitHub</th>
-    </tr>
-    <tr>
-      <td align="center" colspan="2">
-        <a href="https://github.com/nikhilvishwakarma00/Velune/releases/latest">
-          <img src="assets/badge_github.png" height="50" alt="Get Velune on GitHub">
+        <a href="https://github.com/HariVarna/Velune-desktop/releases/latest">
+          <img src="assets/badge_github.png" height="50" alt="Get Fork on GitHub">
         </a>
       </td>
     </tr>
@@ -205,6 +188,7 @@ Built using **modern Android engineering principles**:
 ```bash
 velune/
 ├── app/
+├── desktop/
 ├── innertube/
 ├── lrclib/
 ├── kizzy/
@@ -216,20 +200,61 @@ velune/
 Getting Started \
 Requirements\
 Android Studio Ladybug+\
-JDK 17
-Android SDK 34+ \
+JDK 21
+Android SDK 36 \
 Run Locally\
 Bash
 ```
-git clone https://github.com/nikhilvishwakarma00/Velune.git\
-cd Velune\
-
+git clone https://github.com/HariVarna/Velune-desktop.git
+cd Velune-desktop
 ```
-Open in Android Studio → Sync → Run ▶ \
-📦 Download
- 
+Open in Android Studio → Sync → Run ▶ (or run `./run-desktop.ps1` / `run-desktop.bat` for the Desktop client)
 
-🚀 Get Latest Release⁠ 
+---
+
+## 📦 Release Guide (Fork)
+
+> **Note:** Releases built from `HariVarna/Velune-desktop` are **fork releases** and are **not** official releases from the upstream [nikhilvishwakarma00/Velune](https://github.com/nikhilvishwakarma00/Velune) repository.
+
+### Prerequisites
+- **JDK 21** and **Android SDK 36** (`compileSdk = 36`, `targetSdk = 36`, `minSdk = 26`).
+- Before tagging or building a release, update [app/build.gradle.kts](app/build.gradle.kts):
+  - Increment `versionCode` (required by Android for upgrades).
+  - Update `versionName` (e.g., `"1.1.3-fork"` — avoid trailing whitespace).
+
+### Build a Signed Release APK Locally
+1. Place your existing release keystore at `app/keystore/release.keystore` (ignored by `.gitignore`; never commit it).
+2. Set your signing environment variables in your shell (never commit secret values):
+   ```powershell
+   $env:STORE_PASSWORD = "<your-store-password>"
+   $env:KEY_ALIAS = "<your-key-alias>"
+   $env:KEY_PASSWORD = "<your-key-password>"
+   ```
+3. Run validation and build the release APKs:
+   ```powershell
+   .\gradlew.bat :app:testUniversalDebugUnitTest :app:lintUniversalRelease --no-daemon
+   .\gradlew.bat :app:assembleRelease --no-daemon
+   ```
+   *(Or build a single flavor such as `:app:assembleUniversalRelease` or `:app:assembleArm64Release`.)*
+
+### Publish a GitHub Release
+1. In **Settings → Secrets and variables → Actions**, configure the required repository secrets:
+   - `KEYSTORE_BASE64` (base64-encoded contents of your `.keystore`/`.jks` file)
+   - `STORE_PASSWORD`, `KEY_ALIAS`, `KEY_PASSWORD`
+   - Optional `BuildConfig` secrets: `LASTFM_API_KEY`, `LASTFM_SECRET`, `TOGETHER_BEARER_TOKEN`
+2. Push a version tag matching `v*` (for example `v1.1.3`, or `v1.1.3-rc1` to mark as a pre-release):
+   ```bash
+   git tag v1.1.3
+   git push origin v1.1.3
+   ```
+3. The [Android Release workflow](.github/workflows/android-release.yml) validates, builds, signs, verifies, and publishes these assets on the GitHub Release:
+   - `Velune-<tag>-universal.apk`
+   - `Velune-<tag>-arm64-v8a.apk`
+   - `Velune-<tag>-armeabi-v7a.apk`
+   - `Velune-<tag>-x86.apk`
+   - `Velune-<tag>-x86_64.apk`
+
+*(You can also run **Actions → Android Release → Run workflow** to dry-run and download APK artifacts without publishing a GitHub Release.)*
 
 -------------------------------------------------------------------------
 
@@ -274,11 +299,11 @@ Licensed under GPL-3.0
 ## 🔗 Star History
 
 <div align="center">
-  <a href="https://star-history.com/nikhilvishwakarma00/velune&Date">
+  <a href="https://star-history.com/HariVarna/Velune-desktop&Date">
     <picture>
-      <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=nikhilvishwakarma00/velune&type=Date&theme=dark" />
-      <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=nikhilvishwakarma00/velune&type=Date" />
-      <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=nikhilvishwakarma00/velune&type=Date" />
+      <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=HariVarna/Velune-desktop&type=Date&theme=dark" />
+      <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=HariVarna/Velune-desktop&type=Date" />
+      <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=HariVarna/Velune-desktop&type=Date" />
     </picture>
   </a>
 

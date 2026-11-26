@@ -1,0 +1,119 @@
+name: Android Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      version_label:
+        description: "Version label for APK filenames during manual test runs"
+        required: false
+        default: "1.1.2-fork"
+
+permissions:
+  contents: write
+
+jobs:
+  build-release:
+    name: Validate, Build & Sign Release APKs
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Set up Android SDK 36
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android SDK 36 platform and build-tools
+        run: sdkmanager "platforms;android-36" "build-tools;36.0.0"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Run unit tests and lint validation
+        run: ./gradlew :app:testUniversalDebugUnitTest :app:lintUniversalRelease --no-daemon
+
+      - name: Verify signing secrets are configured
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          if [ -z "$KEYSTORE_BASE64" ] || [ -z "$STORE_PASSWORD" ] || [ -z "$KEY_ALIAS" ] || [ -z "$KEY_PASSWORD" ]; then
+            echo "::error::Missing one or more required signing secrets (KEYSTORE_BASE64, STORE_PASSWORD, KEY_ALIAS, KEY_PASSWORD)."
+            exit 1
+          fi
+
+      - name: Decode release keystore
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+        run: |
+          mkdir -p app/keystore
+          printf '%s' "$KEYSTORE_BASE64" | tr -d '\r\n ' | base64 --decode > app/keystore/release.keystore
+          chmod 600 app/keystore/release.keystore
+
+      - name: Build signed release APK variants
+        env:
+          STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+          LASTFM_API_KEY: ${{ secrets.LASTFM_API_KEY }}
+          LASTFM_SECRET: ${{ secrets.LASTFM_SECRET }}
+          TOGETHER_BEARER_TOKEN: ${{ secrets.TOGETHER_BEARER_TOKEN }}
+        run: |
+          ./gradlew \
+            :app:assembleUniversalRelease \
+            :app:assembleArm64Release \
+            :app:assembleArmeabiRelease \
+            :app:assembleX86Release \
+            :app:assembleX86_64Release \
+            --no-daemon
+
+      - name: Remove temporary signing files
+        if: always()
+        run: rm -rf app/keystore
+
+      - name: Package and verify named release APKs
+        run: |
+          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+            VERSION="${GITHUB_REF_NAME}"
+          else
+            VERSION="v${{ inputs.version_label }}"
+          fi
+
+          mkdir -p release-apks
+          cp app/build/outputs/apk/universal/release/app-universal-release.apk "release-apks/Velune-${VERSION}-universal.apk"
+          cp app/build/outputs/apk/arm64/release/app-arm64-release.apk "release-apks/Velune-${VERSION}-arm64-v8a.apk"
+          cp app/build/outputs/apk/armeabi/release/app-armeabi-release.apk "release-apks/Velune-${VERSION}-armeabi-v7a.apk"
+          cp app/build/outputs/apk/x86/release/app-x86-release.apk "release-apks/Velune-${VERSION}-x86.apk"
+          cp app/build/outputs/apk/x86_64/release/app-x86_64-release.apk "release-apks/Velune-${VERSION}-x86_64.apk"
+
+          APKSIGNER="$(find "${ANDROID_HOME}/build-tools" -name apksigner -type f | sort -V | tail -n 1)"
+          for apk in release-apks/*.apk; do
+            echo "Verifying signature: $apk"
+            "$APKSIGNER" verify "$apk"
+          done
+
+      - name: Upload APK artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: velune-android-release-apks
+          path: release-apks/*.apk
+          if-no-files-found: error
+
+      - name: Publish GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          prerelease: ${{ contains(github.ref_name, '-') }}
+          files: release-apks/*.apk
